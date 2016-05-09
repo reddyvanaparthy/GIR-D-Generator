@@ -17,7 +17,7 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110, USA
  */
 
-module utils.GtkWrapper;
+module utils.GirWrapper;
 
 import std.algorithm;
 import std.array;
@@ -28,21 +28,21 @@ import std.stdio;
 
 import utils.DefReader;
 import utils.IndentedStringBuilder;
-import utils.GtkPackage;
-import utils.GtkStruct;
-import utils.GtkFunction;
-import utils.GtkType;
+import utils.GirPackage;
+import utils.GirStruct;
+import utils.GirFunction;
+import utils.GirType;
 import utils.WrapError;
 
 void main(string[] args)
 {
-	GtkWrapper wrapper = new GtkWrapper("./");
+	GirWrapper wrapper = new GirWrapper("./");
 	wrapper.proccess("APILookup.txt");
 
 	if ( args.length > 1 && args[1].among("-f", "--print-free") )
 		wrapper.printFreeFunctions();
 
-	foreach(pack; GtkWrapper.packages)
+	foreach(pack; GirWrapper.packages)
 	{
 		if ( pack.name == "cairo" )
 			continue;
@@ -53,7 +53,7 @@ void main(string[] args)
 	}
 }
 
-class GtkWrapper
+class GirWrapper
 {
 	bool includeComments;
 
@@ -66,7 +66,7 @@ class GtkWrapper
 	static string licence;
 	static string[string] aliasses;
 
-	static GtkPackage[string] packages;
+	static GirPackage[string] packages;
 
 	public this(string apiRoot)
 	{
@@ -143,15 +143,15 @@ class GtkWrapper
 
 	public void wrapPackage(DefReader defReader)
 	{
-		GtkPackage pack;
-		GtkStruct currentStruct;
+		GirPackage pack;
+		GirStruct currentStruct;
 
 		try
 		{
 			if (defReader.value in packages)
 				throw new WrapError(defReader, "Package: "~ defReader.value ~"already defined.");
 
-			pack = new GtkPackage(defReader.value, this, srcDir, bindDir);
+			pack = new GirPackage(defReader.value, this, srcDir, bindDir);
 			packages[defReader.value] = pack;
 			defReader.popFront();
 		}
@@ -210,7 +210,7 @@ class GtkWrapper
 					currentStruct.cType = defReader.value;
 					break;
 				case "namespace":
-					currentStruct.type = GtkStructType.Record;
+					currentStruct.type = GirStructType.Record;
 					currentStruct.lookupClass = false;
 					currentStruct.lookupInterface = false;
 
@@ -235,9 +235,9 @@ class GtkWrapper
 						currentStruct.implements ~= defReader.value;
 					break;
 				case "merge":
-					GtkStruct mergeStruct = pack.getStruct(defReader.value);
+					GirStruct mergeStruct = pack.getStruct(defReader.value);
 					currentStruct.merge(mergeStruct);
-					GtkStruct copy = currentStruct.dup();
+					GirStruct copy = currentStruct.dup();
 					copy.noCode = true;
 					copy.noExternal = true;
 					mergeStruct.pack.collectedStructs[mergeStruct.name] = copy;
@@ -247,7 +247,7 @@ class GtkWrapper
 					if ( vals.length <= 1 )
 						throw new WrapError(defReader, "No destination for move: "~ defReader.value);
 					string newFuncName = ( vals.length == 3 ) ? vals[2] : vals[0];
-					GtkStruct dest = pack.getStruct(vals[1]);
+					GirStruct dest = pack.getStruct(vals[1]);
 					if ( dest is null )
 						dest = createClass(pack, vals[1]);
 					if ( vals[0] !in pack.collectedFunctions )
@@ -308,20 +308,20 @@ class GtkWrapper
 					string[] vals = defReader.value.split();
 					if ( vals[0] !in currentStruct.functions )
 						throw new WrapError(defReader, "Unknown function: "~ vals[0]);
-					findParam(currentStruct, vals[0], vals[1]).direction = GtkParamDirection.Default;
+					findParam(currentStruct, vals[0], vals[1]).direction = GirParamDirection.Default;
 					break;
 				case "out":
 					string[] vals = defReader.value.split();
 					if ( vals[0] !in currentStruct.functions )
 						throw new WrapError(defReader, "Unknown function: "~ vals[0]);
-					findParam(currentStruct, vals[0], vals[1]).direction = GtkParamDirection.Out;
+					findParam(currentStruct, vals[0], vals[1]).direction = GirParamDirection.Out;
 					break;
 				case "inout":
 				case "ref":
 					string[] vals = defReader.value.split();
 					if ( vals[0] !in currentStruct.functions )
 						throw new WrapError(defReader, "Unknown function: "~ vals[0]);
-					findParam(currentStruct, vals[0], vals[1]).direction = GtkParamDirection.InOut;
+					findParam(currentStruct, vals[0], vals[1]).direction = GirParamDirection.InOut;
 					break;
 				case "array":
 					string[] vals = defReader.value.split();
@@ -329,7 +329,7 @@ class GtkWrapper
 					if ( vals[0] !in currentStruct.functions )
 						throw new WrapError(defReader, "Unknown function: "~ vals[0]);
 
-					GtkFunction func = currentStruct.functions[vals[0]];
+					GirFunction func = currentStruct.functions[vals[0]];
 
 					if ( vals[1] == "Return" )
 					{
@@ -339,7 +339,7 @@ class GtkWrapper
 							break;
 						}
 
-						GtkType elementType = new GtkType(this);
+						GirType elementType = new GirType(this);
 
 						elementType.name = func.returnType.name;
 						elementType.cType = func.returnType.cType[0..$-1];
@@ -353,8 +353,8 @@ class GtkWrapper
 					}
 					else
 					{
-						GtkParam param = findParam(currentStruct, vals[0], vals[1]);
-						GtkType elementType = new GtkType(this);
+						GirParam param = findParam(currentStruct, vals[0], vals[1]);
+						GirType elementType = new GirType(this);
 
 						elementType.name = param.type.name;
 						elementType.cType = param.type.cType[0..$-1];
@@ -406,7 +406,7 @@ class GtkWrapper
 		}
 	}
 
-	private GtkParam findParam(GtkStruct strct, string func, string name)
+	private GirParam findParam(GirStruct strct, string func, string name)
 	{
 		foreach( param; strct.functions[func].params )
 		{
@@ -442,12 +442,12 @@ class GtkWrapper
 			throw new Exception("Cannot copy  file: "~from);
 	}
 
-	private GtkStruct createClass(GtkPackage pack, string name)
+	private GirStruct createClass(GirPackage pack, string name)
 	{
-		GtkStruct strct = new GtkStruct(this, pack);
+		GirStruct strct = new GirStruct(this, pack);
 		strct.name = name;
 		strct.cType = pack.cTypePrefix ~ name;
-		strct.type = GtkStructType.Record;
+		strct.type = GirStructType.Record;
 		strct.noDecleration = true;
 		pack.collectedStructs["lookup"~name] = strct;
 
@@ -459,7 +459,7 @@ class GtkWrapper
  * Apply aliasses to the tokens in the string, and
  * camelCase underscore separated tokens.
  */
-string stringToGtkD(string str, string[string] aliases, string[string] localAliases = null)
+string stringToGirD(string str, string[string] aliases, string[string] localAliases = null)
 {
 	size_t pos, start;
 	string seps = " \n\r\t\f\v()[]*,;";
@@ -478,7 +478,7 @@ string stringToGtkD(string str, string[string] aliases, string[string] localAlia
 			if ( pos < str.length && str[pos] == '*' && str[start..pos] == "tm" )
 				converted.put("void");
 			else
-				converted.put(tokenToGtkD(str[start..pos], aliases, localAliases));
+				converted.put(tokenToGirD(str[start..pos], aliases, localAliases));
 
 			if ( pos == str.length )
 				break;
@@ -493,17 +493,17 @@ string stringToGtkD(string str, string[string] aliases, string[string] localAlia
 
 unittest
 {
-	assert(stringToGtkD("token", ["token":"tok"]) == "tok");
-	assert(stringToGtkD("string token_to_gtkD(string token, string[string] aliases)", ["token":"tok"])
-	       == "string tokenToGtkD(string tok, string[string] aliases)");
+	assert(stringToGirD("token", ["token":"tok"]) == "tok");
+	assert(stringToGirD("string token_to_girD(string token, string[string] aliases)", ["token":"tok"])
+	       == "string tokenToGirD(string tok, string[string] aliases)");
 }
 
-string tokenToGtkD(string token, string[string] aliases, bool caseConvert=true)
+string tokenToGirD(string token, string[string] aliases, bool caseConvert=true)
 {
-	return tokenToGtkD(token, aliases, null, caseConvert);
+	return tokenToGirD(token, aliases, null, caseConvert);
 }
 
-string tokenToGtkD(string token, string[string] aliases, string[string] localAliases, bool caseConvert=true)
+string tokenToGirD(string token, string[string] aliases, string[string] localAliases, bool caseConvert=true)
 {
 	if ( token in localAliases )
 		return localAliases[token];
@@ -514,7 +514,7 @@ string tokenToGtkD(string token, string[string] aliases, string[string] localAli
 	else if ( token == "pid_t" )
 		return token;
 	else if ( caseConvert )
-		return tokenToGtkD(removeUnderscore(token), aliases, localAliases, false);
+		return tokenToGirD(removeUnderscore(token), aliases, localAliases, false);
 	else
 		return token;
 }

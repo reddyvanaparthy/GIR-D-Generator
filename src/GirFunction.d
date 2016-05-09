@@ -17,7 +17,7 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110, USA
  */
 
-module utils.GtkFunction;
+module utils.GirFunction;
 
 import std.algorithm: among, startsWith, endsWith;
 import std.conv;
@@ -25,13 +25,13 @@ import std.range;
 import std.string : chomp, splitLines, strip, removechars;
 import std.uni: toUpper, toLower;
 
-import utils.GtkEnum;
-import utils.GtkStruct;
-import utils.GtkType;
-import utils.GtkWrapper;
+import utils.GirEnum;
+import utils.GirStruct;
+import utils.GirType;
+import utils.GirWrapper;
 import utils.XML;
 
-enum GtkFunctionType : string
+enum GirFunctionType : string
 {
 	Constructor = "constructor",
 	Method = "method",
@@ -40,17 +40,17 @@ enum GtkFunctionType : string
 	Signal = "glib:signal"
 }
 
-enum GtkTransferOwnership : string
+enum GirTransferOwnership : string
 {
-	None = "none",          /// Gtk owns the returned reference.
+	None = "none",          /// Gir owns the returned reference.
 	Full = "full",          /// We own the returned reference.
 	Container = "container" /// The container in which the references reside has ownership.
 }
 
-final class GtkFunction
+final class GirFunction
 {
 	string name;
-	GtkFunctionType type;
+	GirFunctionType type;
 	string doc;
 	string cType;
 	string libVersion;
@@ -60,23 +60,23 @@ final class GtkFunction
 	bool lookupOverride; /// Force marking this function with overrride.
 	bool noCode; /// Don't generate any class code for this function.
 
-	GtkType returnType;
-	GtkTransferOwnership returnOwnership = GtkTransferOwnership.None;
-	GtkParam instanceParam;
-	GtkParam[] params;
+	GirType returnType;
+	GirTransferOwnership returnOwnership = GirTransferOwnership.None;
+	GirParam instanceParam;
+	GirParam[] params;
 
-	GtkWrapper wrapper;
-	GtkStruct strct;
+	GirWrapper wrapper;
+	GirStruct strct;
 
-	this (GtkWrapper wrapper, GtkStruct strct)
+	this (GirWrapper wrapper, GirStruct strct)
 	{
 		this.wrapper = wrapper;
 		this.strct = strct;
 	}
 
-	GtkFunction dup()
+	GirFunction dup()
 	{
-		GtkFunction copy = new GtkFunction(wrapper, strct);
+		GirFunction copy = new GirFunction(wrapper, strct);
 		
 		foreach ( i, field; this.tupleof )
 			copy.tupleof[i] = field;
@@ -91,7 +91,7 @@ final class GtkFunction
 		if ( name.empty && "moved-to" in reader.front.attributes )
 			name = reader.front.attributes["moved-to"];
 
-		type = cast(GtkFunctionType)reader.front.value;
+		type = cast(GirFunctionType)reader.front.value;
 
 		if ( "c:type" in reader.front.attributes )
 			cType = reader.front.attributes["c:type"];
@@ -125,9 +125,9 @@ final class GtkFunction
 					break;
 				case "return-value":
 					if ( "transfer-ownership" in reader.front.attributes )
-						returnOwnership = cast(GtkTransferOwnership)reader.front.attributes["transfer-ownership"];
+						returnOwnership = cast(GirTransferOwnership)reader.front.attributes["transfer-ownership"];
 
-					returnType = new GtkType(wrapper);
+					returnType = new GirType(wrapper);
 					reader.popFront();
 
 					while( !reader.empty && !reader.endTag("return-value") )
@@ -144,7 +144,7 @@ final class GtkFunction
 								returnType.parse(reader);
 								break;
 							default:
-								throw new XMLException(reader, "Unexpected tag: "~ reader.front.value ~" in GtkFunction: "~ name);
+								throw new XMLException(reader, "Unexpected tag: "~ reader.front.value ~" in GirFunction: "~ name);
 						}
 						reader.popFront();
 					}
@@ -156,28 +156,28 @@ final class GtkFunction
 						switch ( reader.front.value )
 						{
 							case "instance-parameter":
-								instanceParam = new GtkParam(wrapper);
+								instanceParam = new GirParam(wrapper);
 								instanceParam.parse(reader);
 								break;
 							case "parameter":
-								GtkParam param = new GtkParam(wrapper);
+								GirParam param = new GirParam(wrapper);
 								param.parse(reader);
 								params ~= param;
 								break;
 							default:
-								throw new XMLException(reader, "Unexpected tag: "~ reader.front.value ~" in GtkFunction: "~ name);
+								throw new XMLException(reader, "Unexpected tag: "~ reader.front.value ~" in GirFunction: "~ name);
 						}
 						reader.popFront();
 					}
 					break;
 				default:
-					throw new XMLException(reader, "Unexpected tag: "~ reader.front.value ~" in GtkFunction: "~ name);
+					throw new XMLException(reader, "Unexpected tag: "~ reader.front.value ~" in GirFunction: "~ name);
 			}
 			reader.popFront();
 		}
 
-		if ( type == GtkFunctionType.Function && name.startsWith("new") && returnType.cType != "void" )
-			type = GtkFunctionType.Constructor;
+		if ( type == GirFunctionType.Function && name.startsWith("new") && returnType.cType != "void" )
+			type = GirFunctionType.Constructor;
 
 		if ( cType.among("gst_init", "gst_init_check") )
 		{
@@ -201,7 +201,7 @@ final class GtkFunction
 		string[] buff;
 
 		writeDocs(buff);
-		buff ~= "public alias extern(C) "~ getExternalFunctionType() ~" "~ tokenToGtkD(cType, wrapper.aliasses, localAliases()) ~";";
+		buff ~= "public alias extern(C) "~ getExternalFunctionType() ~" "~ tokenToGirD(cType, wrapper.aliasses, localAliases()) ~";";
 
 		return buff;
 	}
@@ -211,15 +211,15 @@ final class GtkFunction
 		string[] buff;
 
 		writeDocs(buff);
-		buff ~= "extern(C) "~ getExternalFunctionType() ~" "~ tokenToGtkD(name, wrapper.aliasses, localAliases()) ~";";
+		buff ~= "extern(C) "~ getExternalFunctionType() ~" "~ tokenToGirD(name, wrapper.aliasses, localAliases()) ~";";
 
 		return buff;
 	}
 
 	string getExternal()
 	{
-		assert(type != GtkFunctionType.Callback);
-		assert(type != GtkFunctionType.Signal);
+		assert(type != GirFunctionType.Callback);
+		assert(type != GirFunctionType.Signal);
 
 		if (strct.pack.name == "glgdk")
 			return getExternalFunctionType() ~" glc_"~ cType ~";";
@@ -230,7 +230,7 @@ final class GtkFunction
 	private string getExternalFunctionType()
 	{
 		string ext;
-		string type = stringToGtkD(returnType.cType, wrapper.aliasses, localAliases());
+		string type = stringToGirD(returnType.cType, wrapper.aliasses, localAliases());
 
 		if ( type.startsWith("bool") )
 			ext ~= type.replaceFirst("bool", "int");
@@ -241,9 +241,9 @@ final class GtkFunction
 
 		if ( instanceParam )
 		{
-			ext ~= stringToGtkD(instanceParam.type.cType, wrapper.aliasses, localAliases());
+			ext ~= stringToGirD(instanceParam.type.cType, wrapper.aliasses, localAliases());
 			ext ~= " ";
-			ext ~= tokenToGtkD(instanceParam.name, wrapper.aliasses, localAliases());
+			ext ~= tokenToGirD(instanceParam.name, wrapper.aliasses, localAliases());
 		}
 
 		foreach ( i, param; params )
@@ -251,7 +251,7 @@ final class GtkFunction
 			if ( i > 0 || instanceParam )
 				ext ~= ", ";
 
-			type = stringToGtkD(param.type.cType, wrapper.aliasses, localAliases());
+			type = stringToGirD(param.type.cType, wrapper.aliasses, localAliases());
 
 			if ( type.startsWith("bool") )
 				ext ~= type.replaceFirst("bool", "int");
@@ -261,7 +261,7 @@ final class GtkFunction
 			ext ~= " ";
 			//Both name and type are ... for Variadic functions.
 			if ( param.name != "..." )
-				ext ~= tokenToGtkD(param.name, wrapper.aliasses, localAliases());
+				ext ~= tokenToGirD(param.name, wrapper.aliasses, localAliases());
 		}
 
 		if ( throws )
@@ -280,7 +280,7 @@ final class GtkFunction
 		resolveLength();
 		writeDocs(buff);
 
-		if ( type == GtkFunctionType.Constructor )
+		if ( type == GirFunctionType.Constructor )
 		{
 			dec ~= "this(";
 		}
@@ -293,14 +293,14 @@ final class GtkFunction
 				dec ~= "override ";
 
 			dec ~= getType(returnType) ~" ";
-			dec ~= tokenToGtkD(name, wrapper.aliasses, localAliases()) ~"(";
+			dec ~= tokenToGirD(name, wrapper.aliasses, localAliases()) ~"(";
 		}
 
 		size_t paramCount;
 
-		if ( instanceParam && type == GtkFunctionType.Method && (strct.isNamespace() || strct.noNamespace ) )
+		if ( instanceParam && type == GirFunctionType.Method && (strct.isNamespace() || strct.noNamespace ) )
 		{
-			dec ~= getType(instanceParam.type) ~" "~ tokenToGtkD(instanceParam.name, wrapper.aliasses, localAliases());
+			dec ~= getType(instanceParam.type) ~" "~ tokenToGirD(instanceParam.name, wrapper.aliasses, localAliases());
 			paramCount++;
 		}
 
@@ -312,19 +312,19 @@ final class GtkFunction
 			if ( returnType.length > -1 && param == params[returnType.length] )
 				continue;
 
-			if ( paramCount == 0 && strct.type == GtkStructType.Record && isInstanceParam(param) )
+			if ( paramCount == 0 && strct.type == GirStructType.Record && isInstanceParam(param) )
 				continue;
 
 			if ( paramCount++ > 0 )
 				dec ~= ", ";
 
-			if ( param.direction == GtkParamDirection.Out )
+			if ( param.direction == GirParamDirection.Out )
 				dec ~= "out ";
-			else if ( param.direction == GtkParamDirection.InOut )
+			else if ( param.direction == GirParamDirection.InOut )
 				dec ~= "ref ";
 
 			dec ~= getType(param.type, param.direction) ~" ";
-			dec ~= tokenToGtkD(param.name, wrapper.aliasses, localAliases());
+			dec ~= tokenToGirD(param.name, wrapper.aliasses, localAliases());
 		}
 
 		dec ~= ")";
@@ -339,7 +339,7 @@ final class GtkFunction
 		string[] outToD;
 		string gtkCall = cType ~"(";
 
-		GtkStruct returnDType;
+		GirStruct returnDType;
 
 		if ( returnType.isArray() )
 			returnDType = strct.pack.getStruct(returnType.elementType.name);
@@ -348,26 +348,26 @@ final class GtkFunction
 
 		if ( instanceParam || ( !params.empty && isInstanceParam(params[0])) )
 		{
-			GtkStruct dType;
+			GirStruct dType;
 
 			if ( instanceParam )
 			{
 				dType = strct.pack.getStruct(instanceParam.type.name);
 
 				if ( dType.cType != instanceParam.type.cType.removechars("*") && !instanceParam.type.cType.among("gpointer", "gconstpointer") )
-					gtkCall ~= "cast("~ stringToGtkD(instanceParam.type.cType, wrapper.aliasses, localAliases()) ~")";
+					gtkCall ~= "cast("~ stringToGirD(instanceParam.type.cType, wrapper.aliasses, localAliases()) ~")";
 			}
 			else
 			{
 				dType = strct.pack.getStruct(params[0].type.name);
 
 				if ( dType.cType != params[0].type.cType.removechars("*") && !params[0].type.cType.among("gpointer", "gconstpointer") )
-					gtkCall ~= "cast("~ stringToGtkD(params[0].type.cType, wrapper.aliasses, localAliases()) ~")";
+					gtkCall ~= "cast("~ stringToGirD(params[0].type.cType, wrapper.aliasses, localAliases()) ~")";
 			}
 
 			if ( instanceParam && instanceParam.type.name in strct.structWrap )
 			{
-				GtkStruct insType = strct.pack.getStruct(strct.structWrap[instanceParam.type.name]);
+				GirStruct insType = strct.pack.getStruct(strct.structWrap[instanceParam.type.name]);
 
 				if ( insType )
 					dType = insType;
@@ -375,14 +375,14 @@ final class GtkFunction
 
 			if ( strct.isNamespace() || strct.noNamespace )
 			{
-				string id = tokenToGtkD(instanceParam.name, wrapper.aliasses, localAliases());
+				string id = tokenToGirD(instanceParam.name, wrapper.aliasses, localAliases());
 
 				if ( dType && !(dType.isNamespace() || dType.noNamespace) )
 					gtkCall ~= "("~ id ~" is null) ? null : "~ id ~"."~ dType.getHandleFunc() ~"()";
 				else
 					gtkCall ~= id;
 			}
-			else if ( dType.type == GtkStructType.Interface || dType.lookupInterface )
+			else if ( dType.type == GirStructType.Interface || dType.lookupInterface )
 			{
 				gtkCall ~= strct.getHandleFunc() ~"()";
 			}
@@ -394,8 +394,8 @@ final class GtkFunction
 
 		foreach( i, param; params )
 		{
-			GtkStruct dType;
-			string id = tokenToGtkD(param.name, wrapper.aliasses, localAliases());
+			GirStruct dType;
+			string id = tokenToGirD(param.name, wrapper.aliasses, localAliases());
 
 			if ( param.type.isArray() )
 				dType = strct.pack.getStruct(param.type.elementType.name);
@@ -415,11 +415,11 @@ final class GtkFunction
 				if ( isStringArray(param.type, param.direction) )
 				{
 					// out string[], ref string[]
-					if ( param.direction != GtkParamDirection.Default )
+					if ( param.direction != GirParamDirection.Default )
 					{
 						buff ~= "char** out"~ id ~" = ";
 
-						if ( param.direction == GtkParamDirection.Out )
+						if ( param.direction == GirParamDirection.Out )
 							buff[$-1] ~= "null;";
 						else
 							buff[$-1] ~= "Str.toStringzArray("~ id ~");";
@@ -439,7 +439,7 @@ final class GtkFunction
 				}
 				else
 				{
-					if ( param.direction != GtkParamDirection.Default )
+					if ( param.direction != GirParamDirection.Default )
 					{
 						string len = lenId(param.type);
 
@@ -448,7 +448,7 @@ final class GtkFunction
 						{
 							gtkCall ~= id ~".ptr";
 
-							if ( !len.empty && params[param.type.length].direction != GtkParamDirection.Default )
+							if ( !len.empty && params[param.type.length].direction != GirParamDirection.Default )
 								outToD ~= id ~" = "~ id ~"[0.."~ len ~"];";
 						}
 						// out string, ref string
@@ -456,7 +456,7 @@ final class GtkFunction
 						{
 							buff ~= "char* out"~ id ~" = ";
 
-							if ( param.direction == GtkParamDirection.Out )
+							if ( param.direction == GirParamDirection.Out )
 								buff[$-1] ~= "null;";
 							else
 								buff[$-1] ~= "Str.toStringz("~ id ~");";
@@ -479,16 +479,16 @@ final class GtkFunction
 			{
 				if ( param.type.isArray() )
 				{
-					GtkType elementType = param.type.elementType;
-					GtkStruct dElementType = strct.pack.getStruct(elementType.name);
+					GirType elementType = param.type.elementType;
+					GirStruct dElementType = strct.pack.getStruct(elementType.name);
 
 					if ( elementType.cType.empty )
-						elementType.cType = stringToGtkD(param.type.cType, wrapper.aliasses, localAliases())[0 .. $-1];
+						elementType.cType = stringToGirD(param.type.cType, wrapper.aliasses, localAliases())[0 .. $-1];
 
 					// out gtkdType[], ref gtkdType[]
-					if ( param.direction != GtkParamDirection.Default )
+					if ( param.direction != GirParamDirection.Default )
 					{
-						if ( param.direction == GtkParamDirection.Out )
+						if ( param.direction == GirParamDirection.Out )
 						{
 							buff ~= elementType.cType ~" out"~ id ~" = null;";
 						}
@@ -540,11 +540,11 @@ final class GtkFunction
 				else
 				{
 					// out gtkdType, ref gtkdType
-					if ( param.direction != GtkParamDirection.Default && param.type.cType.endsWith("**") )
+					if ( param.direction != GirParamDirection.Default && param.type.cType.endsWith("**") )
 					{
 						buff ~= param.type.cType.removechars("*") ~"* out"~ id ~" = ";
 
-						if ( param.direction == GtkParamDirection.Out )
+						if ( param.direction == GirParamDirection.Out )
 							buff[$-1] ~= "null;";
 						else
 							buff[$-1] ~= id ~"."~ dType.getHandleFunc() ~"();";
@@ -553,7 +553,7 @@ final class GtkFunction
 
 						outToD ~= id ~" = "~ construct(param.type.name) ~"(out"~ id ~");";
 					}
-					else if ( param.direction == GtkParamDirection.Out )
+					else if ( param.direction == GirParamDirection.Out )
 					{
 						buff ~= param.type.cType.removechars("*") ~"* out"~ id ~" = gMalloc!"~ param.type.cType.removechars("*") ~"();";
 
@@ -566,7 +566,7 @@ final class GtkFunction
 					{
 						gtkCall ~= "("~ id ~" is null) ? null : ";
 						if ( dType.cType != param.type.cType.removechars("*") && !param.type.cType.among("gpointer", "gconstpointer") )
-							gtkCall ~= "cast("~ stringToGtkD(param.type.cType, wrapper.aliasses, localAliases()) ~")";
+							gtkCall ~= "cast("~ stringToGirD(param.type.cType, wrapper.aliasses, localAliases()) ~")";
 						gtkCall ~= id ~"."~ dType.getHandleFunc ~"()";
 					}
 				}
@@ -574,12 +574,12 @@ final class GtkFunction
 			else if ( param.lengthFor || returnType.length == i )
 			{
 				string arrId;
-				string lenType = tokenToGtkD(param.type.cType.removechars("*"), wrapper.aliasses, localAliases());
+				string lenType = tokenToGirD(param.type.cType.removechars("*"), wrapper.aliasses, localAliases());
 
 				if ( param.lengthFor )
-					arrId = tokenToGtkD(param.lengthFor.name, wrapper.aliasses, localAliases());
+					arrId = tokenToGirD(param.lengthFor.name, wrapper.aliasses, localAliases());
 
-				final switch ( param.direction ) with (GtkParamDirection)
+				final switch ( param.direction ) with (GirParamDirection)
 				{
 					case Default:
 						gtkCall ~= "cast("~ lenType ~")"~ arrId ~".length";
@@ -599,9 +599,9 @@ final class GtkFunction
 				if ( param.type.isArray() )
 				{
 					// out bool[], ref bool[]
-					if ( param.direction != GtkParamDirection.Default )
+					if ( param.direction != GirParamDirection.Default )
 					{
-						if ( param.direction == GtkParamDirection.Out )
+						if ( param.direction == GirParamDirection.Out )
 						{
 							buff ~= "int* out"~ id ~" = null;";
 						}
@@ -646,11 +646,11 @@ final class GtkFunction
 				else
 				{
 					// out bool, ref bool
-					if ( param.direction != GtkParamDirection.Default )
+					if ( param.direction != GirParamDirection.Default )
 					{
 						buff ~= "int out"~ id;
 
-						if ( param.direction == GtkParamDirection.Out )
+						if ( param.direction == GirParamDirection.Out )
 							buff[$-1] ~= ";";
 						else
 							buff[$-1] ~= " = ("~ id ~" ? 1 : 0);";
@@ -670,21 +670,21 @@ final class GtkFunction
 				if ( param.type.isArray() )
 				{
 					// out T[], ref T[]
-					if ( param.direction != GtkParamDirection.Default )
+					if ( param.direction != GirParamDirection.Default )
 					{
 						string outType = param.type.elementType.cType;
 						if ( outType.empty )
 							outType = param.type.elementType.name ~"*";
 
-						buff ~= stringToGtkD(outType, wrapper.aliasses, localAliases) ~" out"~ id ~" = ";
+						buff ~= stringToGirD(outType, wrapper.aliasses, localAliases) ~" out"~ id ~" = ";
 
-						if ( param.direction == GtkParamDirection.Out )
+						if ( param.direction == GirParamDirection.Out )
 							buff[$-1] ~= "null;";
 						else
 							buff[$-1] ~= id ~".ptr";
 
 						if ( param.type.elementType.cType.empty )
-							gtkCall ~= "cast("~stringToGtkD(param.type.cType, wrapper.aliasses, localAliases) ~")&out"~ id ~"";
+							gtkCall ~= "cast("~stringToGirD(param.type.cType, wrapper.aliasses, localAliases) ~")&out"~ id ~"";
 						else
 							gtkCall ~= "&out"~ id ~"";
 
@@ -705,7 +705,7 @@ final class GtkFunction
 					else
 					{
 						// out T, ref T
-						if ( param.direction != GtkParamDirection.Default )
+						if ( param.direction != GirParamDirection.Default )
 						{
 							gtkCall ~= "&"~ id;
 						}
@@ -754,7 +754,7 @@ final class GtkFunction
 
 			return buff;
 		}
-		else if ( type == GtkFunctionType.Constructor )
+		else if ( type == GirFunctionType.Constructor )
 		{
 			buff ~= "auto p = " ~ gtkCall ~";";
 
@@ -780,7 +780,7 @@ final class GtkFunction
 			 * Casting is needed because some GTK+ functions
 			 * can return void pointers or base types.
 			 */
-			if ( returnOwnership == GtkTransferOwnership.Full && strct.getAncestor().name == "ObjectG" )
+			if ( returnOwnership == GirTransferOwnership.Full && strct.getAncestor().name == "ObjectG" )
 				buff ~= "this(cast(" ~ strct.cType ~ "*) p, true);";
 			else
 				buff ~= "this(cast(" ~ strct.cType ~ "*) p);";
@@ -789,7 +789,7 @@ final class GtkFunction
 		}
 		else if ( isStringType(returnType) )
 		{
-			if ( outToD.empty && !throws && !(returnOwnership == GtkTransferOwnership.Full) )
+			if ( outToD.empty && !throws && !(returnOwnership == GirTransferOwnership.Full) )
 			{
 				if ( isStringArray(returnType) )
 					buff ~= "return Str.toStringArray(" ~ gtkCall ~");";
@@ -814,7 +814,7 @@ final class GtkFunction
 				buff ~= "";
 			}
 
-			if ( returnOwnership == GtkTransferOwnership.Full )
+			if ( returnOwnership == GirTransferOwnership.Full )
 			{
 				if ( isStringArray(returnType) )
 					buff ~= "scope(exit) Str.freeStringArray(retStr);";
@@ -870,7 +870,7 @@ final class GtkFunction
 			}
 			else
 			{
-				if ( returnOwnership == GtkTransferOwnership.Full && !(returnDType.pack.name == "cairo") )
+				if ( returnOwnership == GirTransferOwnership.Full && !(returnDType.pack.name == "cairo") )
 					buff ~= "return "~ construct(returnType.name) ~"(cast("~ returnDType.cType ~"*) p, true);";
 				else
 					buff ~= "return "~ construct(returnType.name) ~"(cast("~ returnDType.cType ~"*) p);";
@@ -934,7 +934,7 @@ final class GtkFunction
 
 	string getSignalName()
 	{
-		assert(type == GtkFunctionType.Signal);
+		assert(type == GirFunctionType.Signal);
 
 		char pc;
 		string signalName;
@@ -969,7 +969,7 @@ final class GtkFunction
 
 	string getDelegateDecleration()
 	{
-		assert(type == GtkFunctionType.Signal);
+		assert(type == GirFunctionType.Signal);
 
 		string buff = getType(returnType) ~ " delegate(";
 
@@ -982,7 +982,7 @@ final class GtkFunction
 				buff ~= getType(param.type) ~ ", ";
 		}
 
-		if ( strct.type == GtkStructType.Interface )
+		if ( strct.type == GirStructType.Interface )
 			buff ~= strct.name ~"IF)";
 		else
 			buff ~= strct.name ~")";
@@ -1040,7 +1040,7 @@ final class GtkFunction
 		buff ~= "\""~ realName ~"\",";
 		buff ~= "cast(GCallback)&callBack"~ getSignalName() ~",";
 
-		if ( strct.type == GtkStructType.Interface )
+		if ( strct.type == GirStructType.Interface )
 			buff ~= "cast(void*)cast("~ strct.name ~"IF)this,";
 		else
 			buff ~= "cast(void*)this,";
@@ -1050,7 +1050,7 @@ final class GtkFunction
 		buff ~= "connectedSignals[\""~ name ~"\"] = 1;";
 		buff ~= "}";
 
-		if ( strct.type == GtkStructType.Interface )
+		if ( strct.type == GirStructType.Interface )
 			buff ~= "_on"~ getSignalName() ~"Listeners ~= dlg;";
 		else
 			buff ~= "on"~ getSignalName() ~"Listeners ~= dlg;";
@@ -1064,7 +1064,7 @@ final class GtkFunction
 	{
 		string[] buff;
 		string type = getType(returnType);
-		GtkStruct dType = strct.pack.getStruct(returnType.name);
+		GirStruct dType = strct.pack.getStruct(returnType.name);
 
 		if ( dType )
 			type = dType.cType ~"*";
@@ -1138,7 +1138,7 @@ final class GtkFunction
 						continue;
 
 					string[] lines = param.doc.splitLines();
-					buff ~= " *     "~ tokenToGtkD(param.name, wrapper.aliasses, localAliases()) ~" = "~ lines[0];
+					buff ~= " *     "~ tokenToGirD(param.name, wrapper.aliasses, localAliases()) ~" = "~ lines[0];
 					foreach( line; lines[1..$] )
 						buff ~= " *         "~ line.strip();
 				}
@@ -1164,13 +1164,13 @@ final class GtkFunction
 				buff ~= " * Since: "~ libVersion;
 			}
 
-			if ( throws || type == GtkFunctionType.Constructor )
+			if ( throws || type == GirFunctionType.Constructor )
 				buff ~= " *";
 
 			if ( throws )
 				buff ~= " * Throws: GException on failure.";
 
-			if ( type == GtkFunctionType.Constructor )
+			if ( type == GirFunctionType.Constructor )
 				buff ~= " * Throws: ConstructionException GTK+ fails to create the object.";
 
 			buff ~= " */";
@@ -1201,13 +1201,13 @@ final class GtkFunction
 	/**
 	 * Get an string representation of the type.
 	 */
-	private string getType(GtkType type, GtkParamDirection direction = GtkParamDirection.Default)
+	private string getType(GirType type, GirParamDirection direction = GirParamDirection.Default)
 	{
 		if ( isStringType(type) )
 		{
-			if ( direction != GtkParamDirection.Default && !type.cType.endsWith("**") )
+			if ( direction != GirParamDirection.Default && !type.cType.endsWith("**") )
 				return "char[]";
-			else if ( direction == GtkParamDirection.Default && type.cType.endsWith("***") )
+			else if ( direction == GirParamDirection.Default && type.cType.endsWith("***") )
 				return "string[][]";
 			else if ( type.isArray && isStringArray(type.elementType, direction) )
 				return getType(type.elementType, direction) ~"[]";
@@ -1239,7 +1239,7 @@ final class GtkFunction
 		}
 		else if ( !type.elementType && type.zeroTerminated )
 		{
-			return getType(type, GtkParamDirection.Out) ~"[]";
+			return getType(type, GirParamDirection.Out) ~"[]";
 		}
 		else
 		{
@@ -1248,18 +1248,18 @@ final class GtkFunction
 			else if ( type.name in strct.structWrap )
 				return strct.structWrap[type.name];
 			else if ( type.name == type.cType )
-				return stringToGtkD(type.name, wrapper.aliasses, localAliases());
+				return stringToGirD(type.name, wrapper.aliasses, localAliases());
 
-			GtkStruct dType = strct.pack.getStruct(type.name);
+			GirStruct dType = strct.pack.getStruct(type.name);
 
 			if ( isDType(dType) )
 			{
-			    if ( dType.type == GtkStructType.Interface )
+			    if ( dType.type == GirStructType.Interface )
 					return dType.name ~"IF";
 			    else
 			    	return dType.name;
 			}
-			else if ( type.cType.empty && dType && dType.type == GtkStructType.Record )
+			else if ( type.cType.empty && dType && dType.type == GirStructType.Record )
 				return dType.cType ~ "*";
 		}
 
@@ -1268,28 +1268,28 @@ final class GtkFunction
 			if ( auto enum_ = strct.pack.getEnum(type.name) )
 				return enum_.cName;
 
-			return stringToGtkD(type.name, wrapper.aliasses, localAliases());
+			return stringToGirD(type.name, wrapper.aliasses, localAliases());
 		}
 
-		if ( direction != GtkParamDirection.Default )
-			return stringToGtkD(type.cType[0..$-1], wrapper.aliasses, localAliases());
+		if ( direction != GirParamDirection.Default )
+			return stringToGirD(type.cType[0..$-1], wrapper.aliasses, localAliases());
 
-		return stringToGtkD(type.cType, wrapper.aliasses, localAliases());
+		return stringToGirD(type.cType, wrapper.aliasses, localAliases());
 	}
 
-	private bool isDType(GtkStruct dType)
+	private bool isDType(GirStruct dType)
 	{
 		if ( dType is null )
 			return false;
-		if ( dType.type.among(GtkStructType.Class, GtkStructType.Interface) )
+		if ( dType.type.among(GirStructType.Class, GirStructType.Interface) )
 			return true;
-		if ( dType.type == GtkStructType.Record && (dType.lookupClass || dType.lookupInterface) )
+		if ( dType.type == GirStructType.Record && (dType.lookupClass || dType.lookupInterface) )
 			return true;
 
 		return false;
 	}
 
-	private bool isStringType(GtkType type)
+	private bool isStringType(GirType type)
 	{
 		if ( type.cType.startsWith("gchar*", "char*", "const(char)*") )
 			return true;
@@ -1301,29 +1301,29 @@ final class GtkFunction
 		return false;
 	}
 
-	private bool isStringArray(GtkType type, GtkParamDirection direction = GtkParamDirection.Default)
+	private bool isStringArray(GirType type, GirParamDirection direction = GirParamDirection.Default)
 	{
-		if ( direction == GtkParamDirection.Default && type.cType.endsWith("**") )
+		if ( direction == GirParamDirection.Default && type.cType.endsWith("**") )
 			return true;
 		if ( type.elementType is null )
 			return false;
 		if ( !type.elementType.cType.endsWith("*") )
 			return false;
-		if ( direction != GtkParamDirection.Default && type.cType.among("char**", "gchar**", "guchar**") )
+		if ( direction != GirParamDirection.Default && type.cType.among("char**", "gchar**", "guchar**") )
 			return false;
 
 		return true;
 	}
 
-	private bool isInstanceParam(GtkParam param)
+	private bool isInstanceParam(GirParam param)
 	{
 		if ( param !is params[0] )
 			return false;
-		if ( strct is null || strct.type != GtkStructType.Record )
+		if ( strct is null || strct.type != GirStructType.Record )
 			return false;
 		if ( !(strct.lookupClass || strct.lookupInterface) )
 			return false;
-		if ( param.direction != GtkParamDirection.Default )
+		if ( param.direction != GirParamDirection.Default )
 			return false;
 		if ( param.lengthFor !is null )
 			return false;
@@ -1335,10 +1335,10 @@ final class GtkFunction
 		return false;
 	}
 
-	private string lenId(GtkType type, string paramName = "p")
+	private string lenId(GirType type, string paramName = "p")
 	{
 		if ( type.length > -1 )
-			return tokenToGtkD(params[type.length].name, wrapper.aliasses, localAliases());
+			return tokenToGirD(params[type.length].name, wrapper.aliasses, localAliases());
 		//The c function returns the length.
 		else if ( type.length == -2 )
 			return "p";
@@ -1359,10 +1359,10 @@ final class GtkFunction
 		if ( strct.noNamespace )
 			return false;
 
-		if ( type == GtkFunctionType.Function && !(!params.empty && isInstanceParam(params[0])) )
+		if ( type == GirFunctionType.Function && !(!params.empty && isInstanceParam(params[0])) )
 			return true;
 
-		if ( type == GtkFunctionType.Method && strct.isNamespace() )
+		if ( type == GirFunctionType.Method && strct.isNamespace() )
 			return true;
 
 		return false;
@@ -1378,15 +1378,15 @@ final class GtkFunction
 		if ( name == "to_string" && params.empty )
 			return true;
 
-		GtkStruct ancestor = strct.getParent();
+		GirStruct ancestor = strct.getParent();
 
 		while(ancestor)
 		{
 			if ( name in ancestor.functions && name !in strct.aliases )
 			{
-				GtkFunction func = ancestor.functions[name];
+				GirFunction func = ancestor.functions[name];
 
-				if ( !(func.noCode || func.isVariadic() || func.type == GtkFunctionType.Callback) && paramsEqual(func) )
+				if ( !(func.noCode || func.isVariadic() || func.type == GirFunctionType.Callback) && paramsEqual(func) )
 					return true;
 			}
 
@@ -1399,7 +1399,7 @@ final class GtkFunction
 	/**
 	 * Return true if the params of func match the params of this function.
 	 */
-	private bool paramsEqual(GtkFunction func)
+	private bool paramsEqual(GirFunction func)
 	{
 		if ( params.length != func.params.length )
 			return false;
@@ -1415,8 +1415,8 @@ final class GtkFunction
 
 	private string construct(string type)
 	{
-		GtkStruct dType = strct.pack.getStruct(type);
-		debug assert(dType, "Only call construct for valid GtkD types");
+		GirStruct dType = strct.pack.getStruct(type);
+		debug assert(dType, "Only call construct for valid D types");
 		string name = dType.name;
 
 		if ( type in strct.structWrap )
@@ -1424,7 +1424,7 @@ final class GtkFunction
 
 		if ( dType.pack.name.among("cairo", "glib", "gthread") )
 			return "new "~name;
-		else if( dType.type == GtkStructType.Interface )
+		else if( dType.type == GirStructType.Interface )
 			return "ObjectG.getDObject!("~ name ~", "~ name ~"IF)";
 		else
 			return "ObjectG.getDObject!("~ name ~")";
@@ -1438,16 +1438,16 @@ final class GtkFunction
 		foreach( param; params )
 		{
 			if ( auto par = strct.pack.getStruct(param.type.name) )
-				buff ~= stringToGtkD(", "~ par.cType ~"* "~ param.name, wrapper.aliasses, localAliases());
+				buff ~= stringToGirD(", "~ par.cType ~"* "~ param.name, wrapper.aliasses, localAliases());
 			else if ( auto enum_ = strct.pack.getEnum(param.type.name) )
-				buff ~= stringToGtkD(", "~ enum_.cName ~" "~ param.name, wrapper.aliasses, localAliases());
+				buff ~= stringToGirD(", "~ enum_.cName ~" "~ param.name, wrapper.aliasses, localAliases());
 			else if ( !param.type.cType.empty )
-				buff ~= stringToGtkD(", "~ param.type.cType ~" "~ param.name, wrapper.aliasses, localAliases());
+				buff ~= stringToGirD(", "~ param.type.cType ~" "~ param.name, wrapper.aliasses, localAliases());
 			else
-				buff ~= stringToGtkD(", "~ param.type.name ~" "~ param.name, wrapper.aliasses, localAliases());
+				buff ~= stringToGirD(", "~ param.type.name ~" "~ param.name, wrapper.aliasses, localAliases());
 		}
 
-		if ( strct.type == GtkStructType.Interface )
+		if ( strct.type == GirStructType.Interface )
 			buff ~= ", "~ strct.name ~"IF _"~ strct.name.toLower();
 		else
 			buff ~= ", "~ strct.name ~" _"~ strct.name.toLower();
@@ -1464,22 +1464,22 @@ final class GtkFunction
 			if ( i > 0 )
 				buff ~= ", ";
 
-			GtkStruct par = strct.pack.getStruct(param.type.name);
+			GirStruct par = strct.pack.getStruct(param.type.name);
 
 			if ( isDType(par) )
 			{
-				buff ~= construct(param.type.name) ~"("~ tokenToGtkD(param.name, wrapper.aliasses, localAliases()) ~")";
+				buff ~= construct(param.type.name) ~"("~ tokenToGirD(param.name, wrapper.aliasses, localAliases()) ~")";
 			}
 			else if ( isStringType(param.type) )
 			{
 				if ( isStringArray(param.type) )
-					buff ~= "Str.toStringArray("~ tokenToGtkD(param.name, wrapper.aliasses, localAliases()) ~")";
+					buff ~= "Str.toStringArray("~ tokenToGirD(param.name, wrapper.aliasses, localAliases()) ~")";
 				else
-					buff ~= "Str.toString("~ tokenToGtkD(param.name, wrapper.aliasses, localAliases()) ~")";
+					buff ~= "Str.toString("~ tokenToGirD(param.name, wrapper.aliasses, localAliases()) ~")";
 			}
 			else
 			{
-				buff ~= tokenToGtkD(param.name, wrapper.aliasses, localAliases());
+				buff ~= tokenToGirD(param.name, wrapper.aliasses, localAliases());
 			}
 		}
 
@@ -1491,25 +1491,25 @@ final class GtkFunction
 	}
 }
 
-enum GtkParamDirection : string
+enum GirParamDirection : string
 {
 	Default = "",
 	Out = "out",
 	InOut = "inout",
 }
 
-final class GtkParam
+final class GirParam
 {
 	string doc;
 	string name;
-	GtkType type;
-	GtkTransferOwnership ownerschip = GtkTransferOwnership.None;
-	GtkParamDirection direction = GtkParamDirection.Default;
+	GirType type;
+	GirTransferOwnership ownerschip = GirTransferOwnership.None;
+	GirParamDirection direction = GirParamDirection.Default;
 
-	GtkParam lengthFor;
-	GtkWrapper wrapper;
+	GirParam lengthFor;
+	GirWrapper wrapper;
 
-	this(GtkWrapper wrapper)
+	this(GirWrapper wrapper)
 	{
 		this.wrapper = wrapper;
 	}
@@ -1519,9 +1519,9 @@ final class GtkParam
 		name = reader.front.attributes["name"];
 
 		if ( "transfer-ownership" in reader.front.attributes )
-			ownerschip = cast(GtkTransferOwnership)reader.front.attributes["transfer-ownership"];
+			ownerschip = cast(GirTransferOwnership)reader.front.attributes["transfer-ownership"];
 		if ( "direction" in reader.front.attributes )
-			direction = cast(GtkParamDirection)reader.front.attributes["direction"];
+			direction = cast(GirParamDirection)reader.front.attributes["direction"];
 
 		reader.popFront();
 
@@ -1547,16 +1547,16 @@ final class GtkParam
 					break;
 				case "array":
 				case "type":
-					type = new GtkType(wrapper);
+					type = new GirType(wrapper);
 					type.parse(reader);
 					break;
 				case "varargs":
-					type = new GtkType(wrapper);
+					type = new GirType(wrapper);
 					type.name = "...";
 					type.cType = "...";
 					break;
 				default:
-					throw new XMLException(reader, "Unexpected tag: "~ reader.front.value ~" in GtkParam: "~ name);
+					throw new XMLException(reader, "Unexpected tag: "~ reader.front.value ~" in GirParam: "~ name);
 			}
 
 			reader.popFront();
