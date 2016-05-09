@@ -32,7 +32,7 @@ endif
 .DEFAULT_GOAL = $(BINNAME)
 
 SOURCES = $(wildcard src/*.d)
-BINNAME = gtkwrap
+BINNAME = gir-d-generator
 
 $(BINNAME): $(SOURCES)
 	$(DC) $^ $(output) $(DCFLAGS) $(LDFLAGS)
